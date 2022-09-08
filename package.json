@@ -7,10 +7,12 @@
     "bcryptjs": "^2.4.3",
     "corepack": "^0.10.0",
     "express": "^4.17.2",
+    "fs": "^0.0.1-security",
     "mongoose": "^6.2.0",
     "multer": "^1.4.4",
     "node-schedule": "^2.1.0",
     "npm": "^8.1.2",
+    "python-shell": "^3.0.1",
     "save": "^2.4.0"
   },
   "scripts": {

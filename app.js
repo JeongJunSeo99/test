@@ -27,6 +27,7 @@ app
     .use(express.urlencoded({extended: true}))
     .use("/app_list", require("./routes/app_list"))
     .listen(port, () => {console.log('Express is listening on port', port);})
+    
 /*
 app.listen(port, () => {
     console.log('Express is listening on port', port);
@@ -37,4 +38,108 @@ app.listen(port, () => {
 http.listen(app.get('port'), function() {
     console.log('Node app is running on port', app.get('port'));
   });
+*/
+
+
+
+/*
+app.post("/angle", async (req, res) => {
+
+    console.log(req.body);
+
+    try {
+       
+        sid = req.body.serialnum
+        let today = new Date();
+        let cur_time = today.toLocaleString();
+
+        var options = {
+            qos:1
+        };
+        var bed_control = 'command/' + sid;
+
+        var a = 4;
+        var b = 1000;
+        var c = 0;
+        var d = 1;
+        
+        var msg = req.body.btnnum;
+        //console.log(msg)
+        
+        var head_count= 0;
+        var leg_count=0;
+
+        if(msg== "headup" ){
+            bed_c = {
+                "function_mode" : req.body.f,
+                "command_type" :req.body.c,
+                "mh_sn" : sid,
+                "head_count" : 5,
+                "foot_count" : 0
+            };
+                
+        }
+        else if(msg == "headdown"){
+            bed_c = {
+                "function_mode" : req.body.f,
+                "command_type" :req.body.c,
+                "mh_sn" : sid,
+                "head_count" : -5,
+                "foot_count" : 0
+            };
+        }
+        else if(msg == "legup"){
+            bed_c = {
+                "function_mode" : req.body.f,
+                "command_type" :req.body.c,
+                "mh_sn" : sid,
+                "head_count" : 0,
+                "foot_count" : 5
+            };
+            
+        }
+        else if(msg == "legdown"){
+            bed_c = {
+                "function_mode" : req.body.f,
+                "command_type" :req.body.c,
+                "mh_sn" : sid,
+                "head_count" : 0,
+                "foot_count" : -5
+            };
+            
+        }
+        else if(msg == "zg"){
+            bed_c = {
+                "function_mode" : 4,
+                "command_type" :req.body.c,
+                "mh_sn" : sid,
+            };
+        }
+        else if(msg == "flat"){
+            bed_c = {
+                "function_mode" : 2,
+                "command_type" :req.body.c,
+                "mh_sn" : sid
+            };
+        }
+    
+        console.log(bed_c)
+        client.publish(bed_control,JSON.stringify(bed_c),options);
+        const result = {
+            code: 200,
+            msg: 'sucess',
+            req_msg : msg
+        };
+        res.send(result);
+    }
+    catch (error) {
+        console.error(error.message);
+        const result = {
+            code: 500,
+            msg: 'server error'
+        };
+        res.send(result);
+    }
+});
+
 */

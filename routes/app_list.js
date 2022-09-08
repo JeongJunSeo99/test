@@ -3,13 +3,28 @@ const User = require("../model/user");
 const Bed = require("../model/bed");
 const Enviroment_data = require("../model/enviroment_data");
 const Snore_data = require("../model/snore_data");
+const File = require("../model/file");
 const Today = require("../model/today");
+const Mat = require("../model/mat_data");
 const router = express.Router();          
 //const bcrypt = require("bcryptjs");     
 const mongoose = require("mongoose");
 const multer = require("multer");
-const upload = multer({dest : 'uploads/', limits: { filesize: 100 * 1024 * 1024}});
 const schedule = require('node-schedule');
+const { PythonShell }= require("python-shell");
+var fs = require("fs");
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, './uploads') // 파일 업로드 경로
+    },
+    filename: function (req, file, cb) {
+      cb(null, file.fieldname + '-' + Date.now()) //파일 이름 설정
+    }
+})
+
+//const upload = multer({dest : 'uploads/', limits: { filesize: 100 * 1024 * 1024}});
+const upload = multer({storage: storage});
 
 /* 
 1. 모델 폴더에 스키마 정의 
@@ -214,12 +229,13 @@ router.post("/change", async (req, res) => { //설문조사
         serial = req.body.serialnum;
         user_name = req.body.name;
         phone_number = req.body.ph;
+        console.log(user_name + "/" + phone_number);    
 
-		if(req.body.name == NULL){
+		if(user_name == ""){
             let user = await User.findOne({ serialnum : serial });  
             user_name = user.name;
         }
-        else if(req.body.ph == NULL){
+        else if(phone_number == ""){
             let user = await User.findOne({ serialnum : serial });  
             phone_number = user.phone_number
         }
@@ -279,7 +295,7 @@ router.post("/pw_2", async (req, res) => { //비밀번호 찾기(비밀번호 �
 
         //let user = await User.findOne({ serial });
 		
-        let user = await User.update({serialnum : serial }, {
+        let user = await User.update({id: req.body.id, phone_number: req.body.ph }, {
         $set: {
             password : req.body.pw
         }
@@ -309,7 +325,7 @@ router.post("/sleep_check", async (req, res) => {
         //let cur_time = day.toLocaleString();
         let cur_time = day.getTime();
 
-        let bed = await Bed.findOne({ serialnum: serial, sleep_msg: "sleep" }).sort({"_id":-1}).limit(1);
+        let bed = await Bed.findOne({ serialnum: serial, msg: "sleep" }).sort({"_id":-1}).limit(1);
         console.log(bed);
         if(bed){
             tmp = bed.sleep_seq + 1; //전 날 수면체크 + 1
@@ -436,6 +452,49 @@ router.post("/en", async (req, res) => {
     } 
 });
 
+router.post("/mat", async (req, res) => { 
+    try { // id 비교 
+        serial = req.body.serialnum
+
+        let day = new Date(); // 현재 시간 구하는 함수
+        //let cur_time = day.toLocaleString();
+        let cur_time = day.getTime();
+
+        mat = new Mat({
+            mh_sn : serial,
+            ble_connect : "a",
+            current_temp : 30, /*default, max, unique ... */
+            setting_temp : 35,
+            off_time : 1,
+            on_time : 1,
+            mode : 1,
+            cover: 1,
+            water_level: 1,
+            pump: 1,
+            heater: 1,
+            error: 1,
+            time : cur_time,
+            s_day : 0
+            });
+
+        const saveMat=await mat.save();
+        const r1 = {
+            code: 200,
+            msg: 'sucess'
+        };
+        res.send(r1);
+        
+    } 
+    catch (error) {
+        console.error(error.message);
+        const result = {
+            code: 500,
+            msg: 'server error'
+        };
+        res.send(result);
+    } 
+});
+
 router.post("/wake_up_check", async (req, res) => { //여기에서 하루치 수면 저장
     try { 
         //하루치 수면 데이터 저장 할 때, 데이터 값을 하나 추가해 DB에 저장해 다른 날들과 구별해서 저장
@@ -453,9 +512,38 @@ router.post("/wake_up_check", async (req, res) => { //여기에서 하루치 수
         var snore_count =0;
         var snore_min = [];
         var s_count = 0;
+        var mat_s_day = [];
+        var m_count = 0;
 
         var sleep_time = Math.trunc((tmp2 - tmp1) /1000 /60 /60);
         console.log(sleep_time);
+
+        var mat_ch = await Mat.find({serial: serial});
+
+        console.log(mat_ch);
+
+        for(var i=0; i<mat_ch.length; i++){
+            if(mat_ch[i].s_day>0){
+                mat_s_day.push(mat_ch[i].s_day);
+            }
+        }
+        console.log(mat_s_day);
+
+        if(mat_s_day.length>0){
+            for(var i=0; i<mat_s_day.length; i++){
+                if(m_count < mat_s_day[i]){
+                    m_count=mat_s_day[i];
+                    
+                }
+            }
+            console.log(m_count);
+        }
+
+        let mat_1 = await Mat.update({serial: serial, time: {$gt : tmp1, $lt : tmp2} }, {
+            $set: {
+                s_day : m_count + 1
+            }
+        });
 
         // tmp1 ~ tmp2 사이 값 쿼리
         for( i=0; i<en.length; i++){
@@ -577,7 +665,7 @@ router.post("/wake_up_check", async (req, res) => { //여기에서 하루치 수
                 console.log("e");
                 j++;
             }     
-            
+
             
             /*
 
@@ -612,6 +700,33 @@ router.post("/wake_up_check", async (req, res) => { //여기에서 하루치 수
                 
             }
             */
+        }
+
+        let bed_wake = await Bed.findOne({ serialnum: serial, msg: "wake" }).sort({"_id":-1}).limit(1);
+
+        if(bed_wake){
+            var tmp = bed_wake.wake_seq + 1; //전 날 수면체크 + 1
+
+            bed_wake = new Bed({
+                time : tmp2,
+                msg : "wake",
+                wake_seq: tmp,
+                serial : serial
+            });
+
+            const saveBed=await bed_wake.save();
+        }
+        else{
+            let tmp = 1;
+
+            bed_wake = new Bed({
+                time : tmp2,
+                msg : "wake",
+                wake_seq: tmp,
+                serial : serial
+            });
+
+            const saveBed=await bed_wake.save();
         }
 
         let today = await Today.findOne({ serial: serial }).sort({"_id":-1}).limit(1);
@@ -695,11 +810,110 @@ router.post("/today_sleep", async (req, res) => {
     } 
 });
 
-router.post('/test', upload.array('file'), (req, res) => { //현준이랑 file 송수신 테스트
-    console.log(req.body);
-    console.log(req.files);
-    res.send("hi");
+router.post('/test', upload.array('file'), async (req, res) => { //현준이랑 file 송수신 테스트
+    try{
+
+            console.log("destinatin에 저장된 파일 명 : ", req.files[0].filename);
+            console.log("업로드된 파일의 전체 경로 ", req.files[0].path);
+            console.log("사용자가 업로드한 파일 명 : ", req.files[0].originalname);
+            
+            let file = await File.findOne({ origin_name: req.files[0].originalname});
+    
+            if(file){
+                if(fs.existsSync("./uploads/" + file.dest_name)){
+                    fs.unlinkSync("./uploads/" + file.dest_name);
+                    console.log("기존 파일 삭제");
+                }
+
+                let file_1 = await File.update({origin_name: req.files[0].originalname }, {
+                    $set: {
+                        origin_name : req.files[0].originalname,
+                        dest_name: req.files[0].filename,
+                        path : req.files[0].path
+                    }
+                });
+            }
+            else{
+                file = await new File({
+                    origin_name : req.files[0].originalname,
+                    dest_name: req.files[0].filename,
+                    path : req.files[0].path
+                });
+    
+                const saveFile= await file.save();
+            }
+   
+        //파일 메타데이터 오리지널 네임 + 데스티네이션 네임 + 경로를 DB에 저장해 맵핑
+        
+        console.log(req.body);
+        console.log(req.files);
+        res.send("hi");
+    }
+    catch (error) {
+        console.error(error.message);
+        const result = {
+            code: 500,
+            msg: 'server error'
+        };
+        res.send(result);
+    } 
 });
 
+
+
+
+router.post("/mdx", async (req, res) => {
+    
+    try {
+        // 맞춤형 온도 서비스 모델에 사용
+        serial = req.body.serialnum;
+        /*
+        let bed_wake = await Bed.findOne({ serialnum: serial, msg: "wake" }).sort({"_id":-1}).limit(1);
+        let bed_sleep = await Bed.findOne({ serialnum: serial, msg: "sleep" }).sort({"_id":-1}).limit(1);
+
+        var mat_1 = await Mat.find({serial: serial, time: {$gt : bed_sleep.time, $lt : bed_wake.time} }, 
+        {"_id":false, "mh_sn":true, "current_temp" : true, "setting_temp" : true, "time":true, "s_day":true});
+       */
+
+        var mat_1 = await Mat.find({serial: serial, s_day : { $gt: 0 } }, 
+        {"_id":false, "mh_sn":true, "current_temp" : true, "setting_temp" : true, "time":true, "s_day":true});
+
+        console.log(mat_1);
+        
+        let options = {
+            args: mat_1
+        };
+
+        
+        PythonShell.run("./data_creation.py", options, function(err, data) {
+            if (err) throw err;
+            console.log(data);
+        });
+
+        res.send("ok");
+        /*
+        let p_options = {
+            scriptPath: '/home/hadoop/Desktop/Medex/server',
+            args: ['value1', 'value2']/home/hadoop/Desktop/Medex/server
+          };
+        
+        let pyshell = new PythonShell('logistic_regression.py', p_options);
+        //pyshell.send('/home/hadoop/Desktop/Medex/server/mdx_data.csv');
+        pyshell.send('./mdx_data.csv')
+        pyshell.on('msg', (msg) => {
+	        console.log(msg)
+            
+        })
+        */
+    }
+    catch (error) {
+        console.error(error.message);
+        const result = {
+            code: 500,
+            msg: 'server error'
+        };
+        res.send(result);
+    }
+});
 
 module.exports = router; 
